@@ -1,0 +1,81 @@
+services:
+  redis:
+    image: redislabs/rejson:latest  # Use RedisJSON as the Redis image
+    ports:
+      - "6379:6379"  # Map Redis port 6379 from container to host
+    volumes:
+      - redis_data:/data  # Persist Redis data in a named volume
+
+  inventory:
+    build:
+      context: ./Backend  # Path to backend directory
+      dockerfile: Dockerfile.inventory  # Use specific Dockerfile for inventory service
+    ports:
+      - "8000:8000"  # Expose FastAPI inventory service on port 8000
+    depends_on:
+      - redis  # Ensure Redis starts before this service
+    environment:
+      - REDIS_HOST=redis  # Set Redis hostname for the inventory service
+      - REDIS_PORT=6379  # Set Redis port
+      - REDIS_PASSWORD=  # No Redis password (empty string)
+    volumes:
+      - ./Backend/Inventory:/app  # Mount local Inventory folder for live code updates
+
+  inventory-consumer:
+    build:
+      context: ./Backend  # Use same backend directory
+      dockerfile: Dockerfile.inventory  # Reuse the same Dockerfile
+    depends_on:
+      - redis  # Ensure Redis is running
+      - inventory  # Ensure inventory service starts before consumer
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+    command: python consumer.py  # Run the consumer script
+    volumes:
+      - ./Backend/Inventory:/app  # Mount source code for live updates
+
+  payment:
+    build:
+      context: ./Backend  # Path to backend
+      dockerfile: Dockerfile.payment  # Use Dockerfile specific to payment service
+    ports:
+      - "8001:8001"  # Expose FastAPI payment service on port 8001
+    depends_on:
+      - redis  # Ensure Redis starts before this service
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+    volumes:
+      - ./Backend/Payment:/app  # Mount Payment service code for live reloading
+
+  payment-consumer:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile.payment
+    depends_on:
+      - redis  # Ensure Redis is running
+      - payment  # Ensure payment service starts before consumer
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+    command: python consumer.py  # Run the consumer script
+    volumes:
+      - ./Backend/Payment:/app  # Mount source code for live updates
+
+  # frontend:
+  #   build: ./Frontend  # Path to React frontend
+  #   ports:
+  #     - "3000:3000"  # Expose React app on port 3000
+  #   depends_on:
+  #     - inventory  # Ensure backend services start first
+  #     - payment
+  #   volumes:
+  #     - ./Frontend:/app  # Mount frontend directory for hot-reloading
+  #     - /app/node_modules  # Ensure node_modules are used from the container
+
+volumes:
+  redis_data:  # Named volume to persist Redis data
